@@ -2,13 +2,29 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+
+# Atom ftp
+.ftpignore
+.ftpconfig
+
+# Results
+*.csv
+tb_logs/
+*.json
+*.out
+saver/
+outputs/
+experiment_results/
+bin/
+reports/*.html
+reports/figures
 
 # C extensions
 *.so
 
 # Distribution / packaging
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -79,11 +95,10 @@ celerybeat-schedule
 # SageMath parsed files
 *.sage.py
 
-# dotenv
+# Environments
 .env
-
-# virtualenv
 .venv
+env/
 venv/
 ENV/
 
@@ -99,3 +114,5 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+*.csv
