@@ -1,9 +1,14 @@
 # Dataset parameters
-dataset: MNIST
+dataset: omniglot
+root_dir: './datasets'
 
 # Queue parameters
 train_queue_size: 50
 test_queue_size: 5
+
+# Meta-learning parameters
+num_shot: 5
+num_query_imgs: 19
 
 # Training parameters
 batch_size: 4
@@ -13,7 +18,3 @@ total_steps: 250000 # Desired number of iterations - should be done smarter
 
 # Model parameters
 model_name: BasicModel
-sampler_class: DataSampler
-global_sampler: {name: Sequential, params: { max_consecutive_frames: 10,
-                                            cache_frames: True,
-                                            keep_video_file_open: True }}

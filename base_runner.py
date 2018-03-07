@@ -19,7 +19,7 @@ class BaseRunner:
     if not os.path.exists(saver_path):
       os.makedirs(saver_path)
 
-    self.graph_builder = GraphBuilder(Constants.config['model_name'], Constants.config['label_class'])
+    self.graph_builder = GraphBuilder(Constants.config['model_name'])
 
   def _start_tf_session(self):
     '''

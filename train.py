@@ -12,7 +12,7 @@ import numpy as np
 from base_runner import BaseRunner
 from constants import Constants
 from helper import Helper
-from data_loader.data_partitioner import DataPartitioner
+import data_loader.data_partitioner as data_partitioner
 from data_loader.data_interface import DataInterface
 from data_loader.labels.label import Label
 
@@ -34,12 +34,11 @@ class Trainer(BaseRunner):
 
   def _build_datasets(self):
     '''
-    Partition the videos into training/testing, start the queues reading from disk,
-    and get their interfaces
+    Retrieve the train/test datasets
     '''
-    data_partitioner = DataPartitioner()
-    self.train_sampler = data_partitioner.get_training_sampler()
-    self.test_sampler = data_partitioner.get_testing_sampler()
+    self.datasets = data_partitioner.load_datasets('datasets', Constants.config['dataset'])
+    self.train_set = DataInterface(self.datasets['train'], mode='train')
+    self.test_set  = DataInterface(self.datasets['test'], mode='test')
 
   def run(self):
     '''
@@ -48,9 +47,7 @@ class Trainer(BaseRunner):
     start_time = time.time()
     self._start_tf_session()
 
-    train_set = DataInterface(self.train_sampler, Constants.config['train_queue_size'])
-    test_set = DataInterface(self.test_sampler, Constants.config['test_queue_size'])
-    self._run_training(train_set, test_set)
+    self._run_training()
 
     print("Training complete. \n\tTime taken: {:6.2f} sec".format(time.time() - start_time))
     self.sess.close()
@@ -59,7 +56,7 @@ class Trainer(BaseRunner):
     tf.reset_default_graph()
     Helper.reset_tb_data()
 
-  def _test_pass(self, batch):
+  def _test_pass(self, support_set, query_set):
     '''
     A single pass through the given batch from the test set
     Note that _test_pass and _training_pass are separate functions in case their internals diverge.
@@ -69,13 +66,14 @@ class Trainer(BaseRunner):
         self.graph_nodes['outputs'],
         self.graph_nodes['test_summary_op']
     ], {
-        self.graph_nodes['input_x']: batch.inputs,
-        self.graph_nodes['input_y']: batch.targets,
+        self.graph_nodes['support_images']: support_set['images'],
+        self.graph_nodes['query_images']: query_set['images'],
+        self.graph_nodes['input_y']: query_set['labels'],
         self.graph_nodes['is_training']: False
     })
     return loss, outputs, summary
 
-  def _training_pass(self, batch):
+  def _training_pass(self, support_set, query_set):
     '''
     A single pass through the given batch from the training set
     Note that _test_pass and _training_pass are separate functions in case their internals diverge.
@@ -86,24 +84,27 @@ class Trainer(BaseRunner):
         self.graph_nodes['outputs'],
         self.graph_nodes['train_summary_op']
     ], {
-        self.graph_nodes['input_x']: batch.inputs,
-        self.graph_nodes['input_y']: batch.targets,
+        self.graph_nodes['support_images']: support_set['images'],
+        self.graph_nodes['query_images']: query_set['images'],
+        self.graph_nodes['input_y']: query_set['labels'],
         self.graph_nodes['is_training']: True
     })
     return loss, outputs, summary
 
-  def _evaluate(self, outputs, targets):
+  def _evaluate(self, outputs, support_set, query_set):
     '''
     Any additional logging you may want.
     '''
     return None
 
-  def _run_training(self, train_set, test_set):
+  def _run_training(self):
     '''
     The training/validation loop
     '''
-    summary_freq = 25
-    test_pass_freq = 20 # How often to run validation
+    train_set = self.train_set
+    test_set = self.test_set
+    summary_freq = 50
+    test_pass_freq = 51 # How often to run validation
 
     step = self.sess.run(self.graph_nodes['global_step'])
     task_str = 'train'
@@ -114,16 +115,16 @@ class Trainer(BaseRunner):
       task_str = 'train' if is_training_pass else 'test'
       # Run training or test pass
       if is_training_pass:
-        batch = train_set.get_next_batch()
-        loss, outputs, summary = self._training_pass(batch)
+        support_set, query_set = train_set.get_next_batch()
+        loss, outputs, summary = self._training_pass(support_set, query_set)
       else:
-        batch = test_set.get_next_batch()
-        loss, outputs, summary = self._test_pass(batch)
+        support_set, query_set = test_set.get_next_batch()
+        loss, outputs, summary = self._test_pass(support_set, query_set)
       # Get the current global step
       step = self.sess.run(self.graph_nodes['global_step'])
 
       # Evaluate model's outputs
-      tb_stats = self._evaluate(outputs, batch.targets)
+      tb_stats = self._evaluate(outputs, support_set, query_set)
 
       # Write logs
       if step % summary_freq == 0 or not is_training_pass:
@@ -135,7 +136,8 @@ class Trainer(BaseRunner):
           self.writer.add_summary(summary, step)
 
       # Display current iteration results
-      print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--+---EPS---|".format(task_str))
+      if step % 30 == 0:
+        print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--+---EPS---|".format(task_str))
       time_taken = time.time() - loop_start_time
       eps = float(Constants.config['batch_size'])/time_taken
       percent_done = 100. * step / Constants.config['total_steps']
@@ -146,7 +148,7 @@ class Trainer(BaseRunner):
             "  | {:7.2f}".format(eps) + " |")
 
       # Save model
-      if step % 250 == 0 and is_training_pass:
+      if step % 100 == 0 and is_training_pass:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")

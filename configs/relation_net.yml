@@ -1,0 +1,23 @@
+# Dataset parameters
+dataset: omniglot
+root_dir: './datasets'
+
+# Meta-learning parameters
+# Training / validation
+num_way: 5 # How many classes present in support/query sets
+num_shot: 1 # How many images from each class sampled in support set
+num_query_imgs: 19 # How many total in query set
+# Final evaluation
+eval_num_way: [2, 4, 5, 6, 8, 10, 20, 50, 100, 150, 200]
+eval_num_shot: 1
+eval_query_imgs: 1
+
+
+
+# Training parameters
+optimizer: adam # Desired optimizer - must exist in build_graph()
+learning_rate: 0.0001
+total_steps: 200000
+
+# Model parameters
+model_name: RelationNetwork

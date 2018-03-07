@@ -19,9 +19,9 @@ class GraphBuilder:
   If you want to keep it simple, just keep using FileModel and make a new YAML
   model definition in models/yaml_defs
   '''
-  def __init__(self, model_name, label_class_name):
+  def __init__(self, model_name):
     self.model_name = model_name
-    self.label_class_name = label_class_name
+
     if not self._validate_model_name(self.model_name):
       msg = "Model \"" + self.model_name + "\" not supported."
       raise ValueError(msg)
@@ -42,22 +42,25 @@ class GraphBuilder:
     model_module = self._build_module()
 
     # Input placeholders
-    self.graph_nodes['input_x'] = tf.placeholder(tf.float32,
-                                                 model_module.INPUT_SHAPE,
-                                                 name='input_x')
+    self.graph_nodes['support_images'] = tf.placeholder(tf.float32,
+                                                        model_module.INPUT_SHAPE,
+                                                        name='support_images')
+    self.graph_nodes['query_images'] = tf.placeholder(tf.float32,
+                                                      model_module.INPUT_SHAPE,
+                                                      name='query_images')
     self.graph_nodes['global_step'] = tf.train.get_or_create_global_step()
     self.graph_nodes['is_training'] = tf.placeholder(tf.bool,
                                                      shape=[],
                                                      name='is_training')
 
 
-    self.graph_nodes['outputs'] = model_module(self.graph_nodes['input_x'],
+    self.graph_nodes['outputs'] = model_module(self.graph_nodes['support_images'],
+                                               self.graph_nodes['query_images'],
                                                graph_nodes=self.graph_nodes)
     self.graph_nodes['input_y'] = model_module.get_target_tensors()
-    self.graph_nodes['predicted_outputs'] = model_module.get_predicted_outputs(self.graph_nodes['outputs'])
     self.graph_nodes['loss'] = model_module.get_loss(self.graph_nodes)
 
-    if (only_test == False):
+    if not only_test:
       with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         opt = Optimizer.build_ops()
         self.graph_nodes['optimizer'] = opt
@@ -78,14 +81,21 @@ class GraphBuilder:
         'loss_train', self.graph_nodes['loss'], [TRAIN_SUMMARIES])
     self.graph_nodes['test_loss'] = tf.summary.scalar(
         'loss_test', self.graph_nodes['loss'], [TEST_SUMMARIES])
+    # predicted = tf.argmax(self.outputs, axis=1)
+    def top_k(targets, predictions, k):
+      the_val = tf.reduce_mean(tf.to_float(tf.nn.in_top_k(predictions, tf.to_int32(targets), k)))
+      return the_val
+
+    tf.summary.scalar('train_top_1', top_k(self.graph_nodes['input_y'], self.graph_nodes['outputs'], 1), [TRAIN_SUMMARIES])
+    tf.summary.scalar('test_top_1', top_k(self.graph_nodes['input_y'], self.graph_nodes['outputs'], 1), [TEST_SUMMARIES])
 
     self.graph_nodes['train_summary_op'] = tf.summary.merge_all(TRAIN_SUMMARIES)
     self.graph_nodes['test_summary_op'] = tf.summary.merge_all(TEST_SUMMARIES)
 
-    label_class = Helper.import_label_class(self.label_class_name)
-    for traintest in ['train', 'test']:
-      for stat in label_class.TB_STATISTICS:
-        Helper.register_tb_summary(traintest, stat)
+    # label_class = Helper.import_label_class(self.label_class_name)
+    # for traintest in ['train', 'test']:
+    #   for stat in label_class.TB_STATISTICS:
+    #     Helper.register_tb_summary(traintest, stat)
 
 
   def _build_module(self):

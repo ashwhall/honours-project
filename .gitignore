@@ -9,7 +9,7 @@ __pycache__/
 .ftpconfig
 
 # Results
-datasets/
+*.bin
 *.csv
 tb_logs/
 *.json
