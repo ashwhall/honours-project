@@ -139,7 +139,7 @@ class Trainer(BaseRunner):
       if step % 30 == 0:
         print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--+---EPS---|".format(task_str))
       time_taken = time.time() - loop_start_time
-      eps = float(Constants.config['batch_size'])/time_taken
+      eps = float(query_set['labels'].shape[0])/time_taken
       percent_done = 100. * step / Constants.config['total_steps']
       print("|  {:6.2f}%".format(percent_done) + \
             " | {:8d}".format(int(step)) + \
