@@ -76,7 +76,7 @@ class BaseModel(snt.AbstractModule):
     '''
     A single pass through the given batch from the training set
     '''
-    loss, outputs, summary = self.sess.run([
+    loss, outputs, summary = sess.run([
         graph_nodes['loss'],
         graph_nodes['outputs'],
         graph_nodes['test_summary_op']
