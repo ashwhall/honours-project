@@ -11,7 +11,7 @@ class BasicModel(BaseModel):
 
 
   TARGET_SHAPE = [None]
-  INPUT_SHAPE = [None, 105, 105, 3]
+  INPUT_SHAPE = [None, 28, 28, 3]
   def _build(self, inputs, graph_nodes): # pylint: disable=W0221
     '''
     Abstract method - build the Sonnet module.

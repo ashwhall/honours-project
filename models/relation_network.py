@@ -54,12 +54,11 @@ class RelationModule(snt.AbstractModule):
     return outputs
 
 class RelationNetwork(BaseModel):
+  TARGET_SHAPE = [None]
+  INPUT_SHAPE = [None, 28, 28, 1]
   def __init__(self, name='RelationNetwork'):
     super().__init__(name=name)
 
-
-  TARGET_SHAPE = [None]
-  INPUT_SHAPE = [None, 105, 105, 3]
   def _build(self, support_images, query_images, graph_nodes): # pylint: disable=W0221
     '''
     Args:

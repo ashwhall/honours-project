@@ -14,11 +14,11 @@ eval_query_imgs: 1
 
 # Reptile parameters
 num_inner_steps: 5
-inner_learning_rate: 0.001
+inner_learning_rate: 0.1
 
 # Training parameters
 optimizer: adam # Desired optimizer - must exist in build_graph()
-learning_rate: 0.0001
+learning_rate: 0.001
 total_steps: 100000
 
 # Model parameters

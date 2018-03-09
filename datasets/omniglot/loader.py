@@ -1,8 +1,8 @@
 import os
 import pickle
+from PIL import Image
+
 import numpy as np
-import cv2
-# import matplotlib.pyplot as plt
 '''
 Quick demonstration of the Omniglot format
 '''
@@ -26,7 +26,10 @@ def load_datasets(directory):
         filename = os.path.join(subdir, filename)
         if '.png' in filename.lower():
           labels.append(curr_label)
-          images.append(cv2.imread(filename))
+          with open(filename, 'rb') as in_file:
+            img = Image.open(in_file).resize((28, 28))
+            img = np.array(img).astype('float32').reshape((28, 28, 1))
+            images.append(img)
           image_found = True
       if image_found:
         curr_label += 1
