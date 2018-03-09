@@ -127,7 +127,7 @@ class Trainer(BaseRunner):
             "  | {:7.2f}".format(eps) + " |")
 
       # Save model
-      if step % 100 == 0 and is_training_pass:
+      if step % 500 == 0 and is_training_pass:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")
