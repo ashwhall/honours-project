@@ -73,7 +73,7 @@ class GraphBuilder:
     self.graph_nodes['init_op'] = tf.group(tf.global_variables_initializer(),
                                            tf.local_variables_initializer())
 
-    return self.graph_nodes
+    return self.graph_nodes, model_module
 
 
   def build_summary_ops(self):

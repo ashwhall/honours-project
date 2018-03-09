@@ -28,7 +28,7 @@ class Trainer(BaseRunner):
   '''
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    self.graph_nodes = self.graph_builder.build_graph()
+    self.graph_nodes, self._model_module = self.graph_builder.build_graph()
 
     self._build_datasets()
 
@@ -59,36 +59,15 @@ class Trainer(BaseRunner):
   def _test_pass(self, support_set, query_set):
     '''
     A single pass through the given batch from the test set
-    Note that _test_pass and _training_pass are separate functions in case their internals diverge.
     '''
-    loss, outputs, summary = self.sess.run([
-        self.graph_nodes['loss'],
-        self.graph_nodes['outputs'],
-        self.graph_nodes['test_summary_op']
-    ], {
-        self.graph_nodes['support_images']: support_set['images'],
-        self.graph_nodes['query_images']: query_set['images'],
-        self.graph_nodes['input_y']: query_set['labels'],
-        self.graph_nodes['is_training']: False
-    })
+    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, support_set, query_set)
     return loss, outputs, summary
 
   def _training_pass(self, support_set, query_set):
     '''
     A single pass through the given batch from the training set
-    Note that _test_pass and _training_pass are separate functions in case their internals diverge.
     '''
-    _, loss, outputs, summary = self.sess.run([
-        self.graph_nodes['train_op'],
-        self.graph_nodes['loss'],
-        self.graph_nodes['outputs'],
-        self.graph_nodes['train_summary_op']
-    ], {
-        self.graph_nodes['support_images']: support_set['images'],
-        self.graph_nodes['query_images']: query_set['images'],
-        self.graph_nodes['input_y']: query_set['labels'],
-        self.graph_nodes['is_training']: True
-    })
+    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, support_set, query_set)
     return loss, outputs, summary
 
   def _evaluate(self, outputs, support_set, query_set):

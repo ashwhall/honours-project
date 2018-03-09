@@ -54,3 +54,36 @@ class BaseModel(snt.AbstractModule):
     each element has a single frames' output.
     '''
     return outputs
+
+  def training_pass(self, sess, graph_nodes, support_set, query_set):
+    '''
+    A single pass through the given batch from the training set
+    '''
+    _, loss, outputs, summary = sess.run([
+        graph_nodes['train_op'],
+        graph_nodes['loss'],
+        graph_nodes['outputs'],
+        graph_nodes['train_summary_op']
+    ], {
+        graph_nodes['support_images']: support_set['images'],
+        graph_nodes['query_images']: query_set['images'],
+        graph_nodes['input_y']: query_set['labels'],
+        graph_nodes['is_training']: True
+    })
+    return loss, outputs, summary
+
+  def test_pass(self, sess, graph_nodes, support_set, query_set):
+    '''
+    A single pass through the given batch from the training set
+    '''
+    loss, outputs, summary = self.sess.run([
+        graph_nodes['loss'],
+        graph_nodes['outputs'],
+        graph_nodes['test_summary_op']
+    ], {
+        graph_nodes['support_images']: support_set['images'],
+        graph_nodes['query_images']: query_set['images'],
+        graph_nodes['input_y']: query_set['labels'],
+        graph_nodes['is_training']: False
+    })
+    return loss, outputs, summary
