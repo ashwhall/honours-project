@@ -23,9 +23,11 @@ class Experiment:
   Class which is responsible for running a complete training session, including
   making its required directories and cleaning up after each run.
   '''
-  def __init__(self, config_file, description, exp_queue_name):
+  def __init__(self, experiment_info, exp_queue_name):
+    config_file, description, *vargs = experiment_info
     self._config_file = config_file
     self._description = description.strip()
+    self._vargs = list(vargs) if len(vargs) > 0 else None
     self._exp_queue_name = exp_queue_name
     self._dir_name = self._config_file.rsplit(".", 1)[0]
     self._dir_name = self._dir_name + '_' + self._description if self._description \
@@ -46,7 +48,7 @@ class Experiment:
     The work that a training process does
     '''
     bin_dir = os.path.join(BASE_DIR, self._exp_queue_name, self._dir_name)
-    trainer = Trainer(self._config_file, self._description, bin_dir=bin_dir)
+    trainer = Trainer(self._config_file, self._description, argv=self._vargs, bin_dir=bin_dir)
     trainer.run()
 
   def run(self):
@@ -66,7 +68,7 @@ def _read_queue_file(filename):
   with open(filename, 'r') as f_handle:
     reader = csv.reader(f_handle)
     for row in reader:
-      experiment_info_list.append((row[0].strip(), row[1].strip()))
+      experiment_info_list.append([r.strip() for r in row])
   return experiment_info_list
 
 def _get_exp_queue_name():
@@ -132,11 +134,11 @@ def main(argv):
     print("You must provide a 'queue_file' argument")
     print("Example usage:")
     print("\ttf queued_train.py queue.csv")
-    print("The file should be comma-separated config file, description pairs - one per line")
+    print("The file should be comma-separated lines of (config file, description pairs, **args) - one per line")
     print("Example:")
     print("config_15.yml, with_batchnorm")
-    print("config_16.yml, lower_lr")
-    print("config_17.yml, higher_lr")
+    print("config_16.yml, lower_lr, --learning_rate, 0.002, ")
+    print("config_17.yml, higher_lr, --learning_rate, 0.002, --total_steps,  90000")
     print("...")
     return
 
@@ -149,7 +151,7 @@ def main(argv):
   exp_queue_name = _get_exp_queue_name()
   experiments = []
   for experiment_info in experiment_info_list:
-    experiments.append(Experiment(*experiment_info, exp_queue_name))
+    experiments.append(Experiment(experiment_info, exp_queue_name))
 
   _copy_code(exp_queue_name, queue_file)
 
