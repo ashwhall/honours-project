@@ -14,6 +14,14 @@ class Constants:
     with open(os.path.join('configs', config_file), 'r') as data_file:
       config = yaml.safe_load(data_file)
     config['learning_rate'] = float(config['learning_rate'])
+
+    if config['dataset'] == 'omniglot':
+      config['input_shape'] = [None, 28, 28, 1]
+    elif config['dataset'] == 'cifar100':
+      config['input_shape'] = [None, 32, 32, 3]
+    else:
+      raise ValueError('Dataset "{}" unknown'.format(config['dataset']))
+
     Constants.config = config
 
   @staticmethod

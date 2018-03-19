@@ -9,10 +9,7 @@ class BasicModel(BaseModel):
   def __init__(self, name='BasicModel'):
     super().__init__(name=name)
 
-
-  TARGET_SHAPE = [None]
-  INPUT_SHAPE = [None, 28, 28, 3]
-  def _build(self, inputs, graph_nodes): # pylint: disable=W0221
+  def _build(self, support_images, query_images, graph_nodes): # pylint: disable=W0221
     '''
     Abstract method - build the Sonnet module.
 
@@ -25,7 +22,7 @@ class BasicModel(BaseModel):
     '''
     is_training = graph_nodes['is_training']
 
-    inputs = Layers.conv2d(output_channels=16)(inputs)
+    inputs = Layers.conv2d(output_channels=16)(support_images)
     inputs = Layers.max_pool(inputs)
     inputs = snt.BatchNorm()(inputs, is_training=is_training)
     inputs = tf.nn.relu(inputs)
@@ -48,7 +45,7 @@ class BasicModel(BaseModel):
     inputs = snt.BatchFlatten()(inputs)
     inputs = snt.Linear(50)(inputs)
     inputs = tf.nn.relu(inputs)
-    inputs = snt.Linear(5)(inputs)
+    inputs = snt.Linear(5, name='class_linear')(inputs)
 
     self.outputs = inputs
     return self.outputs

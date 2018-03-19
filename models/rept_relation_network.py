@@ -1,7 +1,4 @@
 import tensorflow as tf
-
-from constants import Constants
-
 from models.relation_network import RelationNetwork
 
 class ReptRelationNetwork(RelationNetwork):

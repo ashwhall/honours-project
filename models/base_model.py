@@ -2,13 +2,15 @@ import abc
 import sonnet as snt
 import tensorflow as tf
 
+from constants import Constants
+
 class BaseModel(snt.AbstractModule):
   '''
   The abstract base class for all models.
   Note that EarlyFusionModel is already a sub-class of this, so extend that if using early fusion.
   '''
-  INPUT_SHAPE = None
-  TARGET_SHAPE = None
+  INPUT_SHAPE = Constants.config['input_shape']
+  TARGET_SHAPE = [None]
 
   def __init__(self, name):
     super().__init__(name=name)

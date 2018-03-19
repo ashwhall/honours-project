@@ -5,7 +5,6 @@ import numpy as np
 from models.base_model import BaseModel
 import models.layers as Layers
 
-
 def conv_block(inputs, is_training):
   inputs = Layers.conv2d(output_channels=64)(inputs)
   inputs = snt.BatchNorm(update_ops_collection=None)(inputs, is_training=is_training)
@@ -54,8 +53,6 @@ class RelationModule(snt.AbstractModule):
     return outputs
 
 class RelationNetwork(BaseModel):
-  TARGET_SHAPE = [None]
-  INPUT_SHAPE = [None, 28, 28, 1]
   def __init__(self, name='RelationNetwork'):
     super().__init__(name=name)
 
