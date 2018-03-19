@@ -1,9 +1,10 @@
-from enum import Enum
+import threading
+import multiprocessing
 import numpy as np
 from scipy.ndimage import interpolation as interp
 
 from constants import Constants
-
+from .random_queue import RandomQueue
 # Keywords for indicating the dataset mode
 TRAIN = 'train'
 TEST = 'test'
@@ -27,6 +28,24 @@ class DataInterface:
                else Constants.config['num_way']
     self._num_query_imgs = Constants.config['eval_query_imgs'] if mode == EVAL \
                       else Constants.config['num_query_imgs']
+    self._batch_queue = RandomQueue(20)
+    self._batch_queue_thread = threading.Thread(target=self._fill_batch_queue)
+    self._batch_queue_thread.daemon = True
+    self._batch_queue_thread.start()
+
+  def get_next_batch(self):
+    '''
+    Returns the next batch from the queue
+    '''
+    batch = self._batch_queue.get()
+    return batch
+
+  def _fill_batch_queue(self):
+    '''
+    Grabs elements from batch_item queue and creates batch objects
+    '''
+    while True:
+      self._batch_queue.put(self._build_next_batch())
 
   def _augment_images(self, support_set, query_set):
     # Compute angles of rotation in 90deg increments
@@ -42,7 +61,7 @@ class DataInterface:
         interp.rotate(img, rotation, output=imgs[i])
     return support_set, query_set
 
-  def get_next_batch(self, num_way=None):
+  def _build_next_batch(self, num_way=None):
     '''
     Returns the next batch from the queue
     '''

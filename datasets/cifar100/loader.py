@@ -16,7 +16,10 @@ def unpickle(file):
 def load_datasets(directory):
   datasets = {}
   for set_name in ['test', 'train']:
-    dataset_dict = unpickle(os.path.join(directory, set_name + '.bin'))
+    try:
+      dataset_dict = unpickle(os.path.join(directory, set_name + '.bin'))
+    except EOFError:
+      print("EOF encountered")
     # Extract relevant info
     images = dataset_dict[b'data']
     labels = dataset_dict[b'fine_labels']
