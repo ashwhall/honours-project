@@ -1,11 +1,32 @@
 import os
 import pickle
 from PIL import Image
-
+from scipy.ndimage import interpolation as interp
 import numpy as np
-'''
-Quick demonstration of the Omniglot format
-'''
+
+def _extend_classes(images, labels):
+  '''
+  Applies rotations to each of the image classes and labels them as distinct classes
+  '''
+  output_images = np.array(images)
+  output_labels = np.array(labels)
+  label_count = np.max(labels)
+
+  # Perform all rotations, add new labels
+  for idx, angle in enumerate([90, 180, 270]):
+    # Create new label values (add a multiple of the count of labels).
+    # E.g. [0, 1, 2] -> [0 + 3, 1 + 3, 2 + 3] = [3, 4, 5]
+    new_labels = np.array(labels) + (idx + 1) * label_count
+    # Copy the old images
+    new_images = np.copy(images)
+    # Rotate them by `angle`
+    for img_idx, img in enumerate(new_images):
+      interp.rotate(img, angle, output=new_images[img_idx])
+    # Add to the end of the passed-in list
+    output_images = np.append(output_images, new_images, 0)
+    output_labels = np.append(output_labels, new_labels, 0)
+  return output_images, output_labels
+
 def load_datasets(directory):
   '''
   Finds all images and builds their labels
@@ -33,6 +54,12 @@ def load_datasets(directory):
           image_found = True
       if image_found:
         curr_label += 1
+    images = np.asarray(images)
+    labels = np.asarray(labels)
+    if set_name == 'train':
+      print("Rotating train images...      \r", end="", flush=True)
+      images, labels = _extend_classes(images, labels)
+
     datasets[set_name] = {
         'images': np.asarray(images),
         'labels': np.asarray(labels)

@@ -4,9 +4,10 @@ import numpy as np
 
 from models.base_model import BaseModel
 import models.layers as Layers
+from constants import Constants
 
-class BasicModel(BaseModel):
-  def __init__(self, name='BasicModel'):
+class StandardModel(BaseModel):
+  def __init__(self, name='StandardModel'):
     super().__init__(name=name)
 
   def _build(self, support_images, query_images, graph_nodes): # pylint: disable=W0221
@@ -45,7 +46,7 @@ class BasicModel(BaseModel):
     inputs = snt.BatchFlatten()(inputs)
     inputs = snt.Linear(50)(inputs)
     inputs = tf.nn.relu(inputs)
-    inputs = snt.Linear(5, name='class_linear')(inputs)
+    inputs = snt.Linear(Constants.config['num_way'], name='class_linear')(inputs)
 
     self.outputs = inputs
     return self.outputs
@@ -65,3 +66,45 @@ class BasicModel(BaseModel):
     calculating the loss.
     '''
     return tf.placeholder(tf.float32, shape=self.TARGET_SHAPE, name="input_y")
+
+  def _get_class_indices(self, dataset, num_way):
+    '''
+    Builds and returns a list of indices for the classes we wish to sample (always the same classes)
+    '''
+    chosen_class_labels = np.arange(num_way)
+    return chosen_class_labels
+
+  def training_pass(self, sess, graph_nodes, train_set):
+    '''
+    A single pass through the given batch from the training set
+    '''
+    class_indices = self._get_class_indices(train_set, Constants.config['num_way'])
+    support_set, query_set = train_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    _, loss, outputs, summary = sess.run([
+        graph_nodes['train_op'],
+        graph_nodes['loss'],
+        graph_nodes['outputs'],
+        graph_nodes['train_summary_op']
+    ], {
+        graph_nodes['support_images']: support_set['images'],
+        graph_nodes['input_y']: support_set['labels'],
+        graph_nodes['is_training']: True
+    })
+    return loss, outputs, summary
+
+  def test_pass(self, sess, graph_nodes, test_set):
+    '''
+    A single pass through the given batch from the training set
+    '''
+    class_indices = self._get_class_indices(test_set, Constants.config['num_way'])
+    support_set, query_set = test_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    loss, outputs, summary = sess.run([
+        graph_nodes['loss'],
+        graph_nodes['outputs'],
+        graph_nodes['test_summary_op']
+    ], {
+        graph_nodes['support_images']: support_set['images'],
+        graph_nodes['input_y']: support_set['labels'],
+        graph_nodes['is_training']: False
+    })
+    return loss, outputs, summary

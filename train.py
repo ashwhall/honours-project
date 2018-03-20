@@ -36,9 +36,10 @@ class Trainer(BaseRunner):
     '''
     Retrieve the train/test datasets
     '''
-    self.datasets = data_partitioner.load_datasets('datasets', Constants.config['dataset'])
-    self.train_set = DataInterface(self.datasets['train'], mode='train')
-    self.test_set  = DataInterface(self.datasets['test'], mode='test')
+    self.datasets = data_partitioner.load_dataset('datasets',
+                                                  Constants.config['dataset'])
+    self.train_set = DataInterface(self.datasets['train'])
+    self.test_set = DataInterface(self.datasets['test'])
 
   def run(self):
     '''
@@ -56,25 +57,19 @@ class Trainer(BaseRunner):
     tf.reset_default_graph()
     Helper.reset_tb_data()
 
-  def _test_pass(self, support_set, query_set):
+  def _test_pass(self, test_set):
     '''
     A single pass through the given batch from the test set
     '''
-    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, support_set, query_set)
+    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, test_set)
     return loss, outputs, summary
 
-  def _training_pass(self, support_set, query_set):
+  def _training_pass(self, train_set):
     '''
     A single pass through the given batch from the training set
     '''
-    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, support_set, query_set)
+    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, train_set)
     return loss, outputs, summary
-
-  def _evaluate(self, outputs, support_set, query_set):
-    '''
-    Any additional logging you may want.
-    '''
-    return None
 
   def _run_training(self):
     '''
@@ -94,37 +89,27 @@ class Trainer(BaseRunner):
       task_str = 'train' if is_training_pass else 'test'
       # Run training or test pass
       if is_training_pass:
-        support_set, query_set = train_set.get_next_batch()
-        loss, outputs, summary = self._training_pass(support_set, query_set)
+        loss, outputs, summary = self._training_pass(train_set)
       else:
-        support_set, query_set = test_set.get_next_batch()
-        loss, outputs, summary = self._test_pass(support_set, query_set)
+        loss, outputs, summary = self._test_pass(test_set)
       # Get the current global step
       step = self.sess.run(self.graph_nodes['global_step'])
 
-      # Evaluate model's outputs
-      tb_stats = self._evaluate(outputs, support_set, query_set)
 
       # Write logs
-      if step % summary_freq == 0 or not is_training_pass:
-        if FLAGS.write_logs:
-          if tb_stats:
-            for key, value in tb_stats.items():
-              if value:
-                Helper.update_tb_variable(step, task_str, key, value, self.sess, self.writer)
+      if FLAGS.write_logs:
+        if step % summary_freq == 0 or not is_training_pass:
           self.writer.add_summary(summary, step)
 
       # Display current iteration results
       if step % 30 == 0:
-        print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--+---EPS---|".format(task_str))
+        print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--|".format(task_str))
       time_taken = time.time() - loop_start_time
-      eps = float(query_set['labels'].shape[0])/time_taken
       percent_done = 100. * step / Constants.config['total_steps']
       print("|  {:6.2f}%".format(percent_done) + \
             " | {:8d}".format(int(step)) + \
             " | {:.14s}".format("{:14.6f}".format(loss)) + \
-            "  | {:.10s}".format("{:10.4f}".format(time_taken)) + \
-            "  | {:7.2f}".format(eps) + " |")
+            "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
       if step % 500 == 0 and is_training_pass:

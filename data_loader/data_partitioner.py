@@ -3,7 +3,10 @@ import importlib
 import re
 import os
 
-def load_datasets(root_dir, dataset_name):
+def load_dataset(root_dir, dataset_name):
+  '''
+  Load the chosen dataset.
+  '''
   import_path = root_dir + '.' + dataset_name.lower() + '.loader'
   dir_path = os.path.join(root_dir, dataset_name.lower())
 

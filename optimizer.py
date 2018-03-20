@@ -10,8 +10,7 @@ class Optimizer:
 
     with tf.control_dependencies(update_ops):
       if Constants.config['optimizer'] == 'adam':
-        return tf.train.AdamOptimizer(learning_rate=Constants.config['learning_rate'],
-                                      epsilon=1e-06)
+        return tf.train.AdamOptimizer(learning_rate=Constants.config['learning_rate'])
       elif Constants.config['optimizer'] == 'adadelta':
         return tf.train.AdadeltaOptimizer(learning_rate=Constants.config['learning_rate'])
       elif Constants.config['optimizer'] == 'sgd':

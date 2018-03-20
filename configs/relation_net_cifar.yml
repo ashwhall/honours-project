@@ -1,5 +1,5 @@
 # Dataset parameters
-dataset: omniglot
+dataset: cifar100
 root_dir: './datasets'
 
 # Meta-learning parameters
@@ -16,7 +16,7 @@ eval_query_imgs: 1
 
 # Training parameters
 optimizer: adam # Desired optimizer - must exist in build_graph()
-learning_rate: 0.001
+learning_rate: 0.01
 total_steps: 200000
 
 # Model parameters

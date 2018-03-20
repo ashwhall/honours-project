@@ -16,10 +16,7 @@ def unpickle(file):
 def load_datasets(directory):
   datasets = {}
   for set_name in ['test', 'train']:
-    try:
-      dataset_dict = unpickle(os.path.join(directory, set_name + '.bin'))
-    except EOFError:
-      print("EOF encountered")
+    dataset_dict = unpickle(os.path.join(directory, set_name + '.bin'))
     # Extract relevant info
     images = dataset_dict[b'data']
     labels = dataset_dict[b'fine_labels']
@@ -28,6 +25,8 @@ def load_datasets(directory):
     labels, images = zip(*sorteds)
     # Correct pixel order by transposing
     images = np.transpose(np.reshape(images,(-1, 3, 32, 32)), (0, 2, 3, 1))
+    images = np.asarray(images)
+    labels = np.asarray(labels)
 
     datasets[set_name] = {
         'images': np.asarray(images),
@@ -41,6 +40,3 @@ def print_dataset_info(the_dict):
     print(set_name)
     for key in the_dict[set_name].keys():
       print(' ', key, ":", the_dict[set_name][key].shape)
-
-# datasets = get_datasets('.')
-# print_dataset_info(datasets)

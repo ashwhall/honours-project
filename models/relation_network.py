@@ -2,7 +2,7 @@ import sonnet as snt
 import tensorflow as tf
 import numpy as np
 
-from models.base_model import BaseModel
+from models.few_shot_model import FewShotModel
 import models.layers as Layers
 
 def conv_block(inputs, is_training):
@@ -52,7 +52,7 @@ class RelationModule(snt.AbstractModule):
     outputs = tf.reshape(outputs, [-1])
     return outputs
 
-class RelationNetwork(BaseModel):
+class RelationNetwork(FewShotModel):
   def __init__(self, name='RelationNetwork'):
     super().__init__(name=name)
 
