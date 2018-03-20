@@ -54,9 +54,9 @@ def load_datasets(directory):
         curr_label += 1
     images = np.asarray(images)
     labels = np.asarray(labels)
-    if set_name == 'train':
-      print("Rotating train images...      \r", end="", flush=True)
-      images, labels = _extend_classes(images, labels)
+
+    print("Rotating {} images...      \r".format(set_name), end="", flush=True)
+    images, labels = _extend_classes(images, labels)
 
     datasets[set_name] = {
         'images': np.asarray(images),
