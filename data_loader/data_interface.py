@@ -56,7 +56,7 @@ class DataInterface:
       query_labels.extend(candidate_labels[query_wheres])
 
     # Limit query images/labels to query_size
-    rand_indices = np.random.permutation(len(support_labels))[:query_size]
+    rand_indices = np.random.permutation(len(query_labels))[:query_size]
     query_images = np.asarray(query_images)[rand_indices]
     query_labels = np.asarray(query_labels)[rand_indices]
 
@@ -70,7 +70,7 @@ class DataInterface:
     # Convert support labels from whatever their true value is to range [0, len(indices))
     # (same as was done already for the query labels)
     _, support_labels = np.unique(support_labels, return_inverse=True)
-    
+
     support_set = {
         'images': support_images,
         'labels': support_labels
