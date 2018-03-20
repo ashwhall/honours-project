@@ -112,7 +112,7 @@ class Trainer(BaseRunner):
             "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
-      if step % 500 == 0 and is_training_pass:
+      if step % 1000 == 0 and is_training_pass:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")

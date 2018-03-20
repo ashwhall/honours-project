@@ -28,8 +28,11 @@ class FewShotModel(BaseModel):
     '''
     A single pass through the given batch from the training set
     '''
-    class_indices = self._get_class_indices(train_set, Constants.config['num_way'])
-    support_set, query_set = train_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    num_way = Constants.config['num_way']
+    num_shot = Constants.config['num_shot']
+    num_query_imgs = Constants.config['num_query_imgs']
+    class_indices = self._get_class_indices(train_set, num_way)
+    support_set, query_set = train_set.get_next_batch(class_indices, num_shot=num_shot, query_size=num_query_imgs)
     _, loss, outputs, summary = sess.run([
         graph_nodes['train_op'],
         graph_nodes['loss'],
@@ -47,8 +50,11 @@ class FewShotModel(BaseModel):
     '''
     A single pass through the given batch from the training set
     '''
-    class_indices = self._get_class_indices(test_set, Constants.config['num_way'])
-    support_set, query_set = test_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    num_way = Constants.config['num_way']
+    num_shot = Constants.config['num_shot']
+    num_query_imgs = Constants.config['num_query_imgs']
+    class_indices = self._get_class_indices(test_set, num_way)
+    support_set, query_set = test_set.get_next_batch(class_indices, num_shot=num_shot, query_size=num_query_imgs)
     loss, outputs, summary = sess.run([
         graph_nodes['loss'],
         graph_nodes['outputs'],
