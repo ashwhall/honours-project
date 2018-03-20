@@ -1,6 +1,5 @@
 import os
-import pickle
-from PIL import Image
+import cv2
 from scipy.ndimage import interpolation as interp
 import numpy as np
 
@@ -47,10 +46,9 @@ def load_datasets(directory):
         filename = os.path.join(subdir, filename)
         if '.png' in filename.lower():
           labels.append(curr_label)
-          with open(filename, 'rb') as in_file:
-            img = Image.open(in_file).resize((28, 28))
-            img = np.array(img).astype('float32').reshape((28, 28, 1))
-            images.append(img)
+          img = cv2.resize(cv2.imread(filename), (28, 28))[:, :, 0]
+          img = img.astype('float32').reshape((28, 28, 1)) / 255
+          images.append(img)
           image_found = True
       if image_found:
         curr_label += 1
