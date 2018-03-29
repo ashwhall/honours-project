@@ -71,6 +71,7 @@ class Loader:
           'labels': np.asarray(labels)
       }
     return datasets
+  
   def get_next_batch(self, dataset, indices, num_shot, query_size=1):
     '''
     Builds a support/query batch and returns it
