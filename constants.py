@@ -19,6 +19,8 @@ class Constants:
       config['input_shape'] = [None, 28, 28, 1]
     elif config['dataset'] == 'cifar100':
       config['input_shape'] = [None, 32, 32, 3]
+    elif config['dataset'] == 'miniimagenet':
+      config['input_shape'] = [None, 256, 256, 3]
     else:
       raise ValueError('Dataset "{}" unknown'.format(config['dataset']))
 

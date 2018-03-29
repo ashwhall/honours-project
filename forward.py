@@ -29,10 +29,9 @@ class Forward(BaseRunner):
     '''
     Retrieve the train/test datasets
     '''
-    self.datasets = data_partitioner.load_datasets('datasets',
-                                                   Constants.config['dataset'],
-                                                   Constants.config['num_way'] if 'fixed_classes' in Constants.config else None)
-    self.test_set  = DataInterface(self.datasets['test'], 'eval', Constants.config['num_way'] if 'fixed_classes' in Constants.config else None)
+    self.datasets = data_partitioner.load_dataset('datasets',
+                                                  Constants.config['dataset'])
+    self.test_set = DataInterface(self.datasets['test'])
 
   def _test_pass(self, support_set, query_set):
     '''

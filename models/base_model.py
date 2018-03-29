@@ -8,7 +8,6 @@ from constants import Constants
 class BaseModel(snt.AbstractModule):
   '''
   The abstract base class for all models.
-  Note that EarlyFusionModel is already a sub-class of this, so extend that if using early fusion.
   '''
   INPUT_SHAPE = Constants.config['input_shape']
   TARGET_SHAPE = [None]
@@ -76,5 +75,12 @@ class BaseModel(snt.AbstractModule):
   def test_pass(self, sess, graph_nodes, test_set):
     '''
     A single pass through the given batch from the training set
+    '''
+    pass
+
+  def prepare_for_training(self, sess, graph_nodes):
+    '''
+    Allow the model to do any final preparation before training. This is where the extension of the
+    output layer should occur, if necessary
     '''
     pass

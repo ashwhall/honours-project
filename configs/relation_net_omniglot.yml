@@ -1,6 +1,6 @@
 # Dataset parameters
 dataset: omniglot
-root_dir: './datasets'
+root_dir: 'datasets'
 
 # Meta-learning parameters
 # Training / validation

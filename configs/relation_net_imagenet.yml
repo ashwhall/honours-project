@@ -1,6 +1,7 @@
 # Dataset parameters
-dataset: cifar100
+dataset: miniimagenet
 root_dir: 'datasets'
+imagenet_dir: '/backup/miniimagenet'
 
 # Meta-learning parameters
 # Training / validation

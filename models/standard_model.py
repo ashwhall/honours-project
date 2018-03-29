@@ -11,16 +11,6 @@ class StandardModel(BaseModel):
     super().__init__(name=name)
 
   def _build(self, support_images, query_images, graph_nodes): # pylint: disable=W0221
-    '''
-    Abstract method - build the Sonnet module.
-
-    Args:
-        inputs (tf.Tensor):
-        graph_nodes (dict{string->tf.Tensor}): Hooks to common tensors
-
-    Returns:
-        outputs (arbitrary structure of tf.Tensors)
-    '''
     is_training = graph_nodes['is_training']
 
     inputs = Layers.conv2d(output_channels=16)(support_images)
@@ -57,7 +47,7 @@ class StandardModel(BaseModel):
     as a KeyError will be raised if a key is missing.
     '''
     targets = graph_nodes['input_y']
-    targets = tf.one_hot(tf.to_int32(targets), 5)
+    targets = tf.one_hot(tf.to_int32(targets), Constants.config['num_way'])
     return tf.losses.softmax_cross_entropy(targets, self.outputs)
 
   def get_target_tensors(self):
@@ -67,19 +57,18 @@ class StandardModel(BaseModel):
     '''
     return tf.placeholder(tf.float32, shape=self.TARGET_SHAPE, name="input_y")
 
-  def _get_class_indices(self, dataset, num_way):
+  def _get_class_indices(self, data_interface, dataset, num_way):
     '''
     Builds and returns a list of indices for the classes we wish to sample (always the same classes)
     '''
     chosen_class_labels = np.arange(num_way)
     return chosen_class_labels
 
-  def training_pass(self, sess, graph_nodes, train_set):
+  def training_pass(self, sess, graph_nodes, data_interface, class_indices):
     '''
     A single pass through the given batch from the training set
     '''
-    class_indices = self._get_class_indices(train_set, Constants.config['num_way'])
-    support_set, query_set = train_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    support_set, query_set = data_interface.get_next_batch('train', class_indices, num_shot=Constants.config['num_shot'])
     _, loss, outputs, summary = sess.run([
         graph_nodes['train_op'],
         graph_nodes['loss'],
@@ -92,12 +81,11 @@ class StandardModel(BaseModel):
     })
     return loss, outputs, summary
 
-  def test_pass(self, sess, graph_nodes, test_set):
+  def test_pass(self, sess, graph_nodes, data_interface, class_indices):
     '''
     A single pass through the given batch from the training set
     '''
-    class_indices = self._get_class_indices(test_set, Constants.config['num_way'])
-    support_set, query_set = test_set.get_next_batch(class_indices, num_shot=Constants.config['num_shot'])
+    support_set, query_set = data_interface.get_next_batch('train', class_indices, num_shot=Constants.config['num_shot'])
     loss, outputs, summary = sess.run([
         graph_nodes['loss'],
         graph_nodes['outputs'],

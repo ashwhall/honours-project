@@ -1,9 +1,12 @@
+import re
 import collections
 import os
+import csv
 import random
 import sys
 import time
 import threading
+from multiprocessing.dummy import Pool as ThreadPool
 from datetime import datetime
 
 import tensorflow as tf
@@ -21,25 +24,19 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_boolean('write_logs', False, 'If True, writes tensorboard logs. Default: False')
 
-class Trainer(BaseRunner):
+datasets = None
+data_interface = None
+
+class SourceTrainer(BaseRunner):
   '''
   This is the entry point for training a model. Takes care of loading config file,
   model, loads from file (if saved) etc.
   '''
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
+  def __init__(self, config_file, description, class_indices, bin_dir, data_interface):
+    super().__init__(config_file, description=description, argv=None, bin_dir=bin_dir)
     self.graph_nodes, self._model_module = self.graph_builder.build_graph()
-
-    self._build_datasets()
-
-  def _build_datasets(self):
-    '''
-    Retrieve the train/test datasets
-    '''
-    self.datasets = data_partitioner.load_dataset(Constants.config['root_dir'],
-                                                  Constants.config['dataset'])
-    self.data_interface = DataInterface(self.datasets)
-
+    self._class_indices = class_indices
+    self.data_interface = data_interface
 
   def run(self):
     '''
@@ -47,7 +44,7 @@ class Trainer(BaseRunner):
     '''
     start_time = time.time()
     self._start_tf_session()
-    self._model_module.prepare_for_training(self.sess, self.graph_nodes)
+
     self._run_training()
 
     print("Training complete. \n\tTime taken: {:6.2f} sec".format(time.time() - start_time))
@@ -57,59 +54,45 @@ class Trainer(BaseRunner):
     tf.reset_default_graph()
     Helper.reset_tb_data()
 
-  def _test_pass(self):
-    '''
-    A single pass through the given batch from the test set
-    '''
-    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, self.data_interface)
-    return loss, outputs, summary
-
   def _training_pass(self):
     '''
     A single pass through the given batch from the training set
     '''
-    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, self.data_interface)
+    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, self.data_interface, self._class_indices)
     return loss, outputs, summary
 
   def _run_training(self):
     '''
     The training/validation loop
     '''
-    summary_freq = 50
-    test_pass_freq = 51 # How often to run validation
+    summary_freq = 100
 
     step = self.sess.run(self.graph_nodes['global_step'])
-    task_str = 'train'
     while step < Constants.config['total_steps']:
       loop_start_time = time.time()
 
-      is_training_pass = step % test_pass_freq != 0 or task_str == 'test'
-      task_str = 'train' if is_training_pass else 'test'
-      # Run training or test pass
-      if is_training_pass:
-        loss, outputs, summary = self._training_pass()
-      else:
-        loss, outputs, summary = self._test_pass()
+      loss, outputs, summary = self._training_pass()
+
       # Get the current global step
       step = self.sess.run(self.graph_nodes['global_step'])
 
-      # Write logs
-      if FLAGS.write_logs:
-        if step % summary_freq == 0 or not is_training_pass:
-          self.writer.add_summary(summary, step)
+
 
       # Display current iteration results
-      if step % 30 == 0:
-        print("|---Done---+---Step---+--{:>5s}ing Loss--+--Sec/Batch--|".format(task_str))
-      time_taken = time.time() - loop_start_time
-      percent_done = 100. * step / Constants.config['total_steps']
-      print("|  {:6.2f}%".format(percent_done) + \
-            " | {:8d}".format(int(step)) + \
-            " | {:.14s}".format("{:14.6f}".format(loss)) + \
-            "  | {:.10s}".format("{:10.4f}".format(time_taken)))
+      if step % summary_freq == 0:
+        print("|---Done---+---Step---+--Training Loss--+--Sec/Batch--|")
+        if FLAGS.write_logs:
+          self.writer.add_summary(summary, step)
+      if step % (summary_freq / 10) == 0:
+        time_taken = time.time() - loop_start_time
+        percent_done = 100. * step / Constants.config['total_steps']
+        print("|  {:6.2f}%".format(percent_done) + \
+              " | {:8d}".format(int(step)) + \
+              " | {:.14s}".format("{:14.6f}".format(loss)) + \
+              "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
-      if step % 1000 == 0 and is_training_pass:
+      if step % 1000 == 0:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")
@@ -127,8 +110,6 @@ class Trainer(BaseRunner):
   def _get_name_string(self):
     dir_string = str(datetime.now().strftime('%m-%d_%H:%M_'))
     dir_string += self.config_file[:self.config_file.rindex('.')]
-    dir_string = dir_string + '_' + self._description if self._description \
-                                                      else dir_string
     return dir_string
 
 def main(argv):
@@ -139,23 +120,52 @@ def main(argv):
     print("Tensorboard data will NOT be written for this run")
     print("Run application with -h for flag usage")
 
-  if '--config_file' in argv:
-    config_file = argv[argv.index('--config_file') + 1]
-  else:
-    config_file = 'basic_config.yml'
+  if '--config_file' not in argv or '--dataset' not in argv or '--source_num_way' not in argv:
+    print("Must provide --config_file, --dataset, --source_num_way")
+    print("Example:")
+    print("tf train_source_models.py --config_file standard_omniglot.yml --dataset omniglot --source_num_way 50")
 
-  if '--description' in argv:
-    description = argv[argv.index('--description') + 1]
-  else:
-    description = ''
 
+  config_file = argv[argv.index('--config_file') + 1]
+  dataset = argv[argv.index('--dataset') + 1]
+  source_num_way = int(argv[argv.index('--source_num_way') + 1])
   random.seed(7218)
   tf.set_random_seed(6459)
   np.random.seed(7518)
 
-  trainer = Trainer(config_file, description, argv)
+  datasets = data_partitioner.load_dataset('datasets', dataset)
+  data_interface = DataInterface(datasets)
 
-  trainer.run()
+  num_classes = data_interface.num_classes('train')
+
+  num_parallel = 8
+
+  splits = []
+  for left in np.arange(num_classes - source_num_way):
+    right = left + source_num_way
+    splits.append(np.arange(left, right))
+  indices = np.arange(len(splits))
+
+  print("About to train {} times... that sounds crazy.".format(len(splits)))
+
+  bin_base = os.path.join('bin', 'source_models', "{}_{}".format(dataset, source_num_way))
+  if not os.path.exists(bin_base):
+    os.makedirs(bin_base)
+
+  with open(os.path.join(bin_base, 'idx_splits.csv'), 'w') as csv_file:
+    writer = csv.writer(csv_file)
+    for index, split in zip(indices, splits):
+      writer.writerow([index, *split])
+  def train(index_split):
+    index, split = index_split
+    bin_dir = os.path.join(bin_base, str(index))
+    trainer = SourceTrainer(config_file, description=None, class_indices=split, bin_dir=bin_dir, data_interface=data_interface)
+    trainer.run()
+
+
+  pool = ThreadPool(num_parallel)
+  pool.map(train, list(zip(indices, splits)))
+  print("COMPLETE")
 
 if __name__ == "__main__":
   main(sys.argv)
