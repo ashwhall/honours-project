@@ -3,6 +3,7 @@ import collections
 import os
 import random
 import sys
+import csv
 import time
 import threading
 from multiprocessing.dummy import Pool as ThreadPool
@@ -168,30 +169,31 @@ def main(argv):
 
   num_parallel = 1
 
-  bin_base = os.path.join('bin', 'base_models', '{}_{}'.format(dataset, source_num_way))
+  bin_base = os.path.join('bin', 'source_models', '{}_{}'.format(dataset, source_num_way))
 
   directories = [(os.path.join(bin_base, sub_dir), sub_dir) for sub_dir in os.listdir(bin_base) \
                     if os.path.isdir(os.path.join(bin_base, sub_dir))]
 
-  # A list of source splits (class indices into train_set)
-  source_splits = []
-  for full_path, sub_dir in directories:
-    # Pull out the class indices
-    split = [int(s) for s in sub_dir.split('_') if len(s) > 0]
-    source_splits.append(split)
+  # List of (directory, split) pairs
+  subdir_splits = []
+  with open(os.path.join(bin_base, 'idx_splits.csv'), 'r') as csv_file:
+    reader = csv.reader(csv_file)
+    for row in reader:
+      subdir, *split = row
+      subdir_splits.append((subdir, [int(s) for s in split]))
 
-  source_splits = [np.arange(1, 51)]
-  print("About to train {} times... that sounds crazy.".format(len(source_splits)))
+  print("About to train {} times... that sounds crazy.".format(len(subdir_splits)))
 
-  def train(split):
-    bin_dir = os.path.join(bin_base, re.sub(r'[\[\],]', '', str(split)).replace(' ', '_'))
+  def train(subdir_split):
+    subdir, split = subdir_split
+    bin_dir = os.path.join(bin_base, subdir)
     print("Working on: ", bin_dir)
     trainer = TargetTrainer(config_file, description=None, source_class_indices=split, bin_dir=bin_dir, data_interface=data_interface)
     trainer.run()
 
 
   pool = ThreadPool(num_parallel)
-  pool.map(train, source_splits)
+  pool.map(train, subdir_splits)
 
 
 if __name__ == "__main__":
