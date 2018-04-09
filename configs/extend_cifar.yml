@@ -8,8 +8,9 @@ target_num_way: 60
 
 # Training parameters
 optimizer: adam # Desired optimizer - must exist in build_graph()
-learning_rate: 0.001
-total_steps: 39999
+learning_rate: 3e-4
+total_steps: 1000
+retraining_steps: 1000
 
 # Model parameters
 model_name: ExtendModel

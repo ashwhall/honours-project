@@ -32,11 +32,17 @@ class TargetTrainer(BaseRunner):
   This is the entry point for training a model. Takes care of loading config file,
   model, loads from file (if saved) etc.
   '''
-  def __init__(self, config_file, description, source_class_indices, bin_dir, data_interface):
+  def __init__(self, config_file, description, source_class_indices, bin_dir, dataset):
     super().__init__(config_file, description=description, argv=None, bin_dir=bin_dir)
     self.graph_nodes, self._model_module = self.graph_builder.build_graph()
     self._source_class_indices = source_class_indices
-    self.data_interface = data_interface
+    datasets = data_partitioner.load_dataset('datasets', dataset)
+    self.data_interface =  DataInterface(datasets)
+
+  def _get_new_class_indices(self, source_indices, num_total_classes, num_new_classes):
+    to_choose_from = list(set(np.arange(num_total_classes)) - set(source_indices))
+    new_class_indices = np.random.choice(to_choose_from, num_new_classes, replace=False)
+    return new_class_indices
 
   def run(self):
     '''
@@ -45,13 +51,16 @@ class TargetTrainer(BaseRunner):
     start_time = time.time()
     self._start_tf_session()
     new_classes = Constants.config['target_num_way'] - Constants.config['num_way']
-    num_target_classes = self.data_interface.num_classes('test')
-    self._target_class_indices = np.random.choice(num_target_classes, new_classes, self.data_interface.num_classes('test'))
-    new_dir_name = re.sub(r'[\[\],]', '', str(self._target_class_indices)).replace(' ', '_')
+    num_total_classes = self.data_interface.num_classes()
+    self._target_class_indices = self._get_new_class_indices(self._source_class_indices,
+                                                             num_total_classes,
+                                                             new_classes)
+    new_dir_name = 'target_model'
     self.saver_path = os.path.join(self._bin_dir, new_dir_name, 'saver', 'model.ckpt')
     if not os.path.exists(self.saver_path[:self.saver_path.rindex('/')]):
       os.makedirs(self.saver_path[:self.saver_path.rindex('/')])
     self._model_module.prepare_for_training(self.sess, self.graph_nodes)
+    self.graph_builder.build_summary_ops()
     self._run_training()
 
     print("Training complete. \n\tTime taken: {:6.2f} sec".format(time.time() - start_time))
@@ -65,23 +74,28 @@ class TargetTrainer(BaseRunner):
     '''
     A single pass through the given batch from the training set
     '''
-    # Extract training data from the target set
-    target_support_set, target_query_set = self.data_interface.get_next_batch('test', self._target_class_indices, num_shot=Constants.config['num_shot'])
-    # Extract test data from the source set
-    source_support_set, source_query_set = self.data_interface.get_next_batch('train', self._source_class_indices, num_shot=Constants.config['num_shot'])
-    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, target_support_set, target_query_set, source_support_set, source_query_set)
+    # Train on TARGET set
+    images, labels = self.data_interface.get_next_batch('train', self._target_class_indices, num_shot=Constants.config['num_shot'])
+    # Need to offset the labels by the number of source classes, as we want (for 4 classes -> 6 classes):
+    # source classes: [0, 1, 2, 3]; target classes = [4, 5]
+    labels = np.asarray(labels) + Constants.config['num_way']
+    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, self.graph_nodes['target_train_summary_op'], images, labels)
     return loss, outputs, summary
 
   def _test_pass(self):
     '''
     A single pass through the given batch from the test set
     '''
-    # Extract training data from the target set
-    target_support_set, target_query_set = self.data_interface.get_next_batch('test', self._target_class_indices, num_shot=Constants.config['num_shot'])
-    # Extract test data from the source set
-    source_support_set, source_query_set = self.data_interface.get_next_batch('train', self._source_class_indices, num_shot=Constants.config['num_shot'])
-    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, target_support_set, target_query_set, source_support_set, source_query_set)
-    return loss, outputs, summary
+    # Test TARGET set
+    images, labels = self.data_interface.get_next_batch('test', self._target_class_indices, num_shot=Constants.config['num_shot'])
+    # Need to offset the labels by the number of source classes, as we want (for 4 classes -> 6 classes):
+    # source classes: [0, 1, 2, 3]; target classes = [4, 5]
+    labels = np.asarray(labels) + Constants.config['num_way']
+    loss_t, outputs_t, summary_t = self._model_module.test_pass(self.sess, self.graph_nodes, self.graph_nodes['target_test_summary_op'], images, labels)
+    # Test SOURCE set
+    images, labels = self.data_interface.get_next_batch('test', self._source_class_indices, num_shot=Constants.config['num_shot'])
+    loss_s, outputs_s, summary_s = self._model_module.test_pass(self.sess, self.graph_nodes, self.graph_nodes['source_test_summary_op'], images, labels)
+    return loss_t, outputs_t, summary_t, loss_s, outputs_s, summary_s
 
   def _run_training(self):
     '''
@@ -92,7 +106,7 @@ class TargetTrainer(BaseRunner):
     test_pass_freq = 10 # How often to run validation
     task_str = 'train'
     step = self.sess.run(self.graph_nodes['global_step'])
-    while step < Constants.config['total_steps']:
+    while step < Constants.config['total_steps'] + Constants.config['retraining_steps']:
       loop_start_time = time.time()
 
       is_training_pass = step % test_pass_freq != 0 or task_str == 'test'
@@ -101,7 +115,8 @@ class TargetTrainer(BaseRunner):
       if is_training_pass:
         loss, outputs, summary = self._training_pass()
       else:
-        loss, outputs, summary = self._test_pass()
+        loss_t, outputs_t, summary_t, loss_s, outputs_s, summary_s = self._test_pass()
+        loss = (loss_t + loss_s) / 2
 
       # Get the current global step
       step = self.sess.run(self.graph_nodes['global_step'])
@@ -110,7 +125,11 @@ class TargetTrainer(BaseRunner):
       # Write logs
       if FLAGS.write_logs:
         if step % summary_freq == 0 or not is_training_pass:
-          self.writer.add_summary(summary, step)
+          if is_training_pass:
+            self.writer.add_summary(summary, step)
+          else:
+            self.writer.add_summary(summary_t, step)
+            self.writer.add_summary(summary_s, step)
       # Display current iteration results
       if step % summary_freq == 0:
         print("|---Done---+---Step---+--Training Loss--+--Sec/Batch--|")
@@ -164,10 +183,9 @@ def main(argv):
   tf.set_random_seed(6459)
   np.random.seed(7518)
 
-  datasets = data_partitioner.load_dataset('datasets', dataset)
-  data_interface = DataInterface(datasets)
 
-  num_parallel = 1
+
+  num_parallel = 8
 
   bin_base = os.path.join('bin', 'source_models', '{}_{}'.format(dataset, source_num_way))
 
@@ -187,8 +205,7 @@ def main(argv):
   def train(subdir_split):
     subdir, split = subdir_split
     bin_dir = os.path.join(bin_base, subdir)
-    print("Working on: ", bin_dir)
-    trainer = TargetTrainer(config_file, description=None, source_class_indices=split, bin_dir=bin_dir, data_interface=data_interface)
+    trainer = TargetTrainer(config_file, description=None, source_class_indices=split, bin_dir=bin_dir, dataset=dataset)
     trainer.run()
 
 

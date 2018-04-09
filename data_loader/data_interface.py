@@ -16,14 +16,14 @@ class DataInterface:
   def __init__(self, _data_loader):
     self._data_loader = _data_loader
 
-  def num_classes(self, dataset):
+  def num_classes(self):
     '''
     Returns the number of classes in the dataset
     '''
-    return self._data_loader.num_classes(dataset)
+    return self._data_loader.num_classes()
 
-  def get_next_batch(self, dataset, indices, num_shot, query_size=1):
+  def get_next_batch(self, dataset, indices, num_shot):
     '''
     Builds a support/query batch and returns it
     '''
-    return self._data_loader.get_next_batch(dataset, indices, num_shot, query_size)
+    return self._data_loader.get_next_batch(dataset, indices, num_shot)

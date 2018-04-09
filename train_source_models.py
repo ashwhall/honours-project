@@ -48,17 +48,42 @@ class SourceTrainer(BaseRunner):
     self._run_training()
 
     print("Training complete. \n\tTime taken: {:6.2f} sec".format(time.time() - start_time))
+    final_test_score = self._get_final_test_score()
     self.sess.close()
     if FLAGS.write_logs:
       self.writer.close()
     tf.reset_default_graph()
     Helper.reset_tb_data()
+    return final_test_score
+
+  def _get_final_test_score(self):
+    top_ones = []
+    for _ in range(20):
+      images, labels = self.data_interface.get_next_batch('test', self._class_indices, num_shot=Constants.config['num_shot'])
+      top_ones.append(self.sess.run([
+          self.graph_nodes['top_1']
+      ], {
+          self.graph_nodes['images']: images,
+          self.graph_nodes['labels']: labels,
+          self.graph_nodes['is_training']: False
+      }))
+
+    return np.mean(top_ones)
 
   def _training_pass(self):
     '''
     A single pass through the given batch from the training set
     '''
-    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, self.data_interface, self._class_indices)
+    images, labels = self.data_interface.get_next_batch('train', self._class_indices, num_shot=Constants.config['num_shot'])
+    loss, outputs, summary = self._model_module.training_pass(self.sess, self.graph_nodes, self.graph_nodes['source_train_summary_op'], images, labels)
+    return loss, outputs, summary
+
+  def _test_pass(self):
+    '''
+    A single pass through the given batch from the training set
+    '''
+    images, labels = self.data_interface.get_next_batch('test', self._class_indices, num_shot=Constants.config['num_shot'])
+    loss, outputs, summary = self._model_module.test_pass(self.sess, self.graph_nodes, self.graph_nodes['source_test_summary_op'], images, labels)
     return loss, outputs, summary
 
   def _run_training(self):
@@ -66,17 +91,21 @@ class SourceTrainer(BaseRunner):
     The training/validation loop
     '''
     summary_freq = 100
-
+    test_pass_freq = 50
     step = self.sess.run(self.graph_nodes['global_step'])
+    last_pass_test = False
     while step < Constants.config['total_steps']:
       loop_start_time = time.time()
 
-      loss, outputs, summary = self._training_pass()
+      if step % test_pass_freq == 0 and not last_pass_test:
+        loss, outputs, summary = self._test_pass()
+        last_pass_test = True
+      else:
+        loss, outputs, summary = self._training_pass()
+        last_pass_test = False
 
       # Get the current global step
       step = self.sess.run(self.graph_nodes['global_step'])
-
-
 
       # Display current iteration results
       if step % summary_freq == 0:
@@ -92,7 +121,7 @@ class SourceTrainer(BaseRunner):
               "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
-      if step % 1000 == 0:
+      if step > 0 and step % 1000 == 0:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")
@@ -136,7 +165,7 @@ def main(argv):
   datasets = data_partitioner.load_dataset('datasets', dataset)
   data_interface = DataInterface(datasets)
 
-  num_classes = data_interface.num_classes('train')
+  num_classes = data_interface.num_classes()
 
   num_parallel = 8
 
@@ -160,7 +189,11 @@ def main(argv):
     index, split = index_split
     bin_dir = os.path.join(bin_base, str(index))
     trainer = SourceTrainer(config_file, description=None, class_indices=split, bin_dir=bin_dir, data_interface=data_interface)
-    trainer.run()
+    final_test_score = trainer.run()
+    print("Final test score: {:.2f}%".format(100 * final_test_score))
+    with open(os.path.join(bin_dir, 'final_score.txt'), 'w') as out_file:
+      out_file.write(str(final_test_score))
+
 
 
   pool = ThreadPool(num_parallel)

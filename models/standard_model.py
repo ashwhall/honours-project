@@ -64,16 +64,15 @@ class StandardModel(BaseModel):
     chosen_class_labels = np.arange(num_way)
     return chosen_class_labels
 
-  def training_pass(self, sess, graph_nodes, data_interface, class_indices):
+  def training_pass(self, sess, graph_nodes, summary_op, support_set, query_set):
     '''
     A single pass through the given batch from the training set
     '''
-    support_set, query_set = data_interface.get_next_batch('train', class_indices, num_shot=Constants.config['num_shot'])
     _, loss, outputs, summary = sess.run([
         graph_nodes['train_op'],
         graph_nodes['loss'],
         graph_nodes['outputs'],
-        graph_nodes['train_summary_op']
+        summary_op
     ], {
         graph_nodes['support_images']: support_set['images'],
         graph_nodes['input_y']: support_set['labels'],
@@ -81,15 +80,14 @@ class StandardModel(BaseModel):
     })
     return loss, outputs, summary
 
-  def test_pass(self, sess, graph_nodes, data_interface, class_indices):
+  def test_pass(self, sess, graph_nodes, summary_op, support_set, query_set):
     '''
     A single pass through the given batch from the training set
     '''
-    support_set, query_set = data_interface.get_next_batch('train', class_indices, num_shot=Constants.config['num_shot'])
     loss, outputs, summary = sess.run([
         graph_nodes['loss'],
         graph_nodes['outputs'],
-        graph_nodes['test_summary_op']
+        summary_op
     ], {
         graph_nodes['support_images']: support_set['images'],
         graph_nodes['input_y']: support_set['labels'],

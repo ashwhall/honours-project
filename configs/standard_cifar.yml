@@ -9,7 +9,8 @@ target_num_way: 60
 # Training parameters
 optimizer: adam # Desired optimizer - must exist in build_graph()
 learning_rate: 0.0001
-total_steps: 14999
+total_steps: 3000
+retraining_steps: 100
 
 # Model parameters
 model_name: StandardModel
