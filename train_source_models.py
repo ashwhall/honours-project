@@ -108,7 +108,7 @@ class SourceTrainer(BaseRunner):
       step = self.sess.run(self.graph_nodes['global_step'])
 
       # Display current iteration results
-      if step % summary_freq == 0:
+      if step % summary_freq == 0 or step == Constants.config['total_steps'] - 1:
         print("|---Done---+---Step---+--Training Loss--+--Sec/Batch--|")
         if FLAGS.write_logs:
           self.writer.add_summary(summary, step)
@@ -121,7 +121,7 @@ class SourceTrainer(BaseRunner):
               "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
-      if step > 0 and step % 1000 == 0:
+      if (step > 0 and step % 1000 == 0) or step == Constants.config['total_steps'] - 1:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")

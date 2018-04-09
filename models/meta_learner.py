@@ -6,7 +6,7 @@ from models.standard_model import StandardModel
 import models.layers as Layers
 from constants import Constants
 
-class ExtendModel(StandardModel):
+class MetaLearner(StandardModel):
   '''
   The model name and the build function must be the same (in terms of what tensorflow sees and name scopes)
   '''

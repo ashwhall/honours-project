@@ -13,4 +13,4 @@ total_steps: 1000
 retraining_steps: 1000
 
 # Model parameters
-model_name: ExtendModel
+model_name: ExtendModelFreezeOldHead
