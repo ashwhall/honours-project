@@ -135,7 +135,7 @@ class TargetTrainer(BaseRunner):
         print("|---Done---+---Step---+--Training Loss--+--Sec/Batch--|")
       if step % (summary_freq / 10) == 0:
         time_taken = time.time() - loop_start_time
-        percent_done = 100. * step / Constants.config['total_steps'] + Constants.config['retraining_steps']
+        percent_done = 100. * step / (Constants.config['total_steps'] + Constants.config['retraining_steps'])
         print("|  {:6.2f}%".format(percent_done) + \
               " | {:8d}".format(int(step)) + \
               " | {:.14s}".format("{:14.6f}".format(loss)) + \
