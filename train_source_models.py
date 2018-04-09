@@ -44,7 +44,7 @@ class SourceTrainer(BaseRunner):
     '''
     start_time = time.time()
     self._start_tf_session()
-
+    self.graph_builder.build_summary_ops()
     self._run_training()
 
     print("Training complete. \n\tTime taken: {:6.2f} sec".format(time.time() - start_time))
