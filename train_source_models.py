@@ -1,5 +1,7 @@
 import re
 import collections
+import math
+import itertools
 import os
 import csv
 import random
@@ -90,8 +92,8 @@ class SourceTrainer(BaseRunner):
     '''
     The training/validation loop
     '''
-    summary_freq = 100
-    test_pass_freq = 50
+    summary_freq = 2
+    test_pass_freq = 2
     step = self.sess.run(self.graph_nodes['global_step'])
     last_pass_test = False
     while step < Constants.config['total_steps']:
@@ -108,11 +110,12 @@ class SourceTrainer(BaseRunner):
       step = self.sess.run(self.graph_nodes['global_step'])
 
       # Display current iteration results
-      if step % summary_freq == 0:
+      if step % summary_freq == 0 or step == Constants.config['total_steps'] - 1:
         print("|---Done---+---Step---+--Training Loss--+--Sec/Batch--|")
         if FLAGS.write_logs:
           self.writer.add_summary(summary, step)
-      if step % (summary_freq / 10) == 0:
+          self.writer.flush()
+      if step % int(math.ceil(summary_freq / 10)) == 0:
         time_taken = time.time() - loop_start_time
         percent_done = 100. * step / Constants.config['total_steps']
         print("|  {:6.2f}%".format(percent_done) + \
@@ -121,7 +124,7 @@ class SourceTrainer(BaseRunner):
               "  | {:.10s}".format("{:10.4f}".format(time_taken)))
 
       # Save model
-      if step > 0 and step % 1000 == 0:
+      if (step > 0 and step % 1000 == 0) or step == Constants.config['total_steps'] - 1:
         print("=============== SAVING - DO NOT KILL PROCESS UNTIL COMPLETE ==============")
         self.saver.save(self.sess, self.saver_path)
         print("============================== SAVE COMPLETE =============================")
@@ -154,7 +157,8 @@ def main(argv):
     print("Example:")
     print("tf train_source_models.py --config_file standard_omniglot.yml --dataset omniglot --source_num_way 50")
 
-
+  num_threads = int(argv[argv.index('--num_threads') + 1]) if '--num_threads' in argv else 8
+  print("Training {} models in parallel".format(num_threads))
   config_file = argv[argv.index('--config_file') + 1]
   dataset = argv[argv.index('--dataset') + 1]
   source_num_way = int(argv[argv.index('--source_num_way') + 1])
@@ -167,16 +171,30 @@ def main(argv):
 
   num_classes = data_interface.num_classes()
 
-  num_parallel = 8
+
+  def list_match(left, right):
+    for l in left:
+      if l not in right:
+        return False
+    return True
 
   splits = []
-  for left in np.arange(num_classes - source_num_way):
-    right = left + source_num_way
-    splits.append(np.arange(left, right))
+  desired_splits = 300
+  while len(splits) < desired_splits:
+    split = list(np.random.choice(num_classes, source_num_way, replace=False))
+    skip = False
+    for existing_split in splits:
+      if list_match(existing_split, split):
+        skip = True
+        break
+    if skip:
+      continue
+    splits.append(split)
   indices = np.arange(len(splits))
 
-  print("About to train {} times... that sounds crazy.".format(len(splits)))
 
+
+  print("About to train {} times... that sounds crazy.".format(len(splits)))
   bin_base = os.path.join('bin', 'source_models', "{}_{}".format(dataset, source_num_way))
   if not os.path.exists(bin_base):
     os.makedirs(bin_base)
@@ -196,7 +214,7 @@ def main(argv):
 
 
 
-  pool = ThreadPool(num_parallel)
+  pool = ThreadPool(num_threads)
   pool.map(train, list(zip(indices, splits)))
   print("COMPLETE")
 

@@ -16,7 +16,13 @@ def avg_pool(inputs, strides=2, padding="SAME"):
   '''
   return tf.nn.avg_pool(inputs, [1, strides, strides, 1], [1, strides, strides, 1], padding)
 
-def conv2d(output_channels, stride=1, rate=1, padding='SAME', kernel_size=3): # pylint: disable=R0913
+def global_pool(inputs):
+  '''
+  Pool globally over each activation map. Useful for fully-convolutional classifier outputs
+  '''
+  return tf.nn.max_pool(inputs, [1, inputs.shape[1], inputs.shape[2], 1], [1, 1, 1, 1], padding='VALID')
+
+def conv2d(output_channels, stride=1, rate=1, padding='SAME', kernel_size=3, use_bias=True): # pylint: disable=R0913
   '''
   Helper method for building snt.Conv2D ops
   '''
@@ -24,7 +30,8 @@ def conv2d(output_channels, stride=1, rate=1, padding='SAME', kernel_size=3): # 
                     kernel_shape=kernel_size,
                     stride=stride,
                     padding=padding,
-                    rate=rate)
+                    rate=rate,
+                    use_bias=use_bias)
 
 
 def random_augment(images):
