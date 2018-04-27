@@ -2,11 +2,11 @@ import sonnet as snt
 import tensorflow as tf
 import numpy as np
 
-from models.extend_model import ExtendModel
+from models.extend_model_freeze_but_new_head import ExtendModelFreezeButNewHead
 import models.layers as Layers
 from constants import Constants
 
-class ExtendModelFreezeOldHead(ExtendModel):
+class ExtendModelFreezeNone(ExtendModelFreezeButNewHead):
   '''
   The model name and the build function must be the same (in terms of what tensorflow sees and name scopes)
   '''
@@ -32,9 +32,12 @@ class ExtendModelFreezeOldHead(ExtendModel):
     sess.run(tf.variables_initializer(new_layer.get_variables()))
     self._output_layer_outputs = tf.concat([self._output_layer_outputs, new_layer_outputs], -1)
 
-    # Get all (gradient, weight) pairs
+    # Initialise with the new values
+    # Replace the model class layer outputs
+    graph_nodes['outputs'] = self._output_layer_outputs
+    graph_nodes['loss'] = self.get_loss(graph_nodes, num_way=Constants.config['target_num_way'])
     grads = graph_nodes['optimizer'].compute_gradients(graph_nodes['loss'])
-    # keep all gradients except for the old softmax head
+    # Only keep the gradients for the added FC layer
     allowed_gradients = [(grad, weight) for (grad, weight) in grads if weight not in self._output_layer.get_variables()]
     # Replace the train op with our limited update
     graph_nodes['train_op'] = graph_nodes['optimizer'].apply_gradients(allowed_gradients, global_step=graph_nodes['global_step'])

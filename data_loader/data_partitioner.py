@@ -13,6 +13,6 @@ def load_dataset(root_dir, dataset_name):
   data_loader_module = importlib.import_module(import_path)
   data_loader_class = getattr(data_loader_module, 'Loader')
   data_loader = data_loader_class(root_dir)
-  data_loader.print_dataset_info()
+  # data_loader.print_dataset_info()
 
   return data_loader

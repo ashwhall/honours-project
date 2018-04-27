@@ -2,11 +2,11 @@ import sonnet as snt
 import tensorflow as tf
 import numpy as np
 
-from models.extend_model import ExtendModel
+from models.extend_model_freeze_but_new_head import ExtendModelFreezeButNewHead
 import models.layers as Layers
 from constants import Constants
 
-class ExtendModelFreezeNone(ExtendModel):
+class ExtendModelFreezeNone(ExtendModelFreezeButNewHead):
   '''
   The model name and the build function must be the same (in terms of what tensorflow sees and name scopes)
   '''

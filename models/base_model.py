@@ -57,12 +57,6 @@ class BaseModel(snt.AbstractModule):
     '''
     return outputs
 
-  @abc.abstractmethod
-  def _get_class_indices(self, dataset, num_way):
-    '''
-    Builds and returns a list of indices for the classes we wish to sample
-    '''
-    pass
 
   @abc.abstractmethod
   def training_pass(self, sess, graph_nodes, train_set):

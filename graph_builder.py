@@ -5,11 +5,14 @@ import tensorflow as tf
 
 from optimizer import Optimizer
 from helper import Helper
+from constants import Constants
 
 SOURCE_TRAIN_SUMMARIES = 'source_train_summaries'
 SOURCE_TEST_SUMMARIES = 'source_test_summaries'
 TARGET_TRAIN_SUMMARIES = 'target_train_summaries'
 TARGET_TEST_SUMMARIES = 'target_test_summaries'
+COMBINED_TRAIN_SUMMARIES = 'combined_train_summaries'
+COMBINED_TEST_SUMMARIES = 'combined_test_summaries'
 
 class GraphBuilder:
   '''
@@ -31,7 +34,7 @@ class GraphBuilder:
     self.graph_nodes = None
     self.model_module = None
 
-  def build_graph(self, only_test=False):
+  def build_graph(self, only_test=False, build_placeholders=False):
     '''
     Build the Tensorflow graph if necessary, returning important graph nodes in
     a dict.
@@ -43,6 +46,8 @@ class GraphBuilder:
 
     model_module = self._build_module()
 
+    if build_placeholders:
+      model_module.build_placeholders(Constants.config['num_way'], Constants.config['target_num_way'], self.template_grads_weights)
     # Input placeholders
     self.graph_nodes['images'] = tf.placeholder(tf.float32,
                                                       model_module.INPUT_SHAPE,
@@ -88,11 +93,16 @@ class GraphBuilder:
     tf.summary.scalar('source_test_top_1', self.graph_nodes['top_1'], [SOURCE_TEST_SUMMARIES])
     tf.summary.scalar('target_train_top_1', self.graph_nodes['top_1'], [TARGET_TRAIN_SUMMARIES])
     tf.summary.scalar('target_test_top_1', self.graph_nodes['top_1'], [TARGET_TEST_SUMMARIES])
+    tf.summary.scalar('combined_train_top_1', self.graph_nodes['top_1'], [COMBINED_TRAIN_SUMMARIES])
+    tf.summary.scalar('combined_test_top_1', self.graph_nodes['top_1'], [COMBINED_TEST_SUMMARIES])
 
     self.graph_nodes['source_train_summary_op'] = tf.summary.merge_all(SOURCE_TRAIN_SUMMARIES)
     self.graph_nodes['source_test_summary_op'] = tf.summary.merge_all(SOURCE_TEST_SUMMARIES)
     self.graph_nodes['target_train_summary_op'] = tf.summary.merge_all(TARGET_TRAIN_SUMMARIES)
     self.graph_nodes['target_test_summary_op'] = tf.summary.merge_all(TARGET_TEST_SUMMARIES)
+    self.graph_nodes['combined_train_summary_op'] = tf.summary.merge_all(COMBINED_TRAIN_SUMMARIES)
+    self.graph_nodes['combined_test_summary_op'] = tf.summary.merge_all(COMBINED_TEST_SUMMARIES)
+
 
     # label_class = Helper.import_label_class(self.label_class_name)
     # for traintest in ['train', 'test']:

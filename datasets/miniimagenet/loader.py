@@ -8,100 +8,40 @@ from constants import Constants
 Quick demonstration of the miniImageNet format
 '''
 class Loader:
-  def __init__(self, csv_directory):
-    self._csv_directory = Constants.config['imagenet_dir']
+  def __init__(self, directory):
+    # Ignore the directory, as minimagenet is stored elsewhere
+    self._csv_directory = '/backup/miniimagenet'
     self._img_directory = os.path.join(self._csv_directory, 'images')
 
-    self._filename_class = self._load_csv_lists()
+    self._datasets = self._load_csv_lists()
 
-  def num_classes(self, dataset):
-    return np.max([self._filename_class[dataset][1]]) + 1
+  def num_classes(self):
+    return len(self._datasets['train'].keys())
 
-  def get_next_batch(self, dataset, indices, num_shot, query_size=1):
+  def _load_img(self, filename):
+    img = cv2.imread(os.path.join(self._img_directory, filename))
+    img = cv2.resize(img, (256, 256))
+    return img
+
+  def get_next_batch(self, dataset, class_indices, num_shot):
     '''
-    Builds a support/query batch and returns it
+    Get a batch with labels matching `class_indices`. `num_shot` images per class
     '''
-    if dataset not in self._filename_class:
-      raise ValueError("{} not supported".format(dataset))
-
-    # Pull out the desired filenames/labels
-    filenames, labels = self._filename_class[dataset]
-
-    # Build list that = 1 where the labels are those passed as `indices`
-    labels_in_use = np.in1d(labels, indices).astype(np.uint8)
-    # Convert to indices into the label list
-    chosen_label_indices = np.where(labels_in_use)[0]
-    # Take the filenames and labels that we may choose from (only the given classes)
-    candidate_filenames = filenames[chosen_label_indices]
-    candidate_labels = labels[chosen_label_indices]
-
-    support_filenames = []
-    support_labels = []
-    query_filenames = []
-    query_labels = []
-    # Find which labels we're working with
-    uniques = np.unique(candidate_labels)
-    for label_val in uniques:
-      # Find where the candidate labels is the one we're after
-      wheres = np.where(candidate_labels == label_val)[0]
-      # Shuffle them to choose out of order
-      np.random.shuffle(wheres)
-      # Limit to `num_shot`
-      support_wheres = wheres[:num_shot]
-      # Take the query indices
-      query_wheres = wheres[num_shot:num_shot+query_size]
-      # Add the support filenames/labels
-      support_filenames.extend(candidate_filenames[support_wheres])
-      support_labels.extend(candidate_labels[support_wheres])
-      # Add the support filenames/labels
-      query_filenames.extend(candidate_filenames[query_wheres])
-      query_labels.extend(candidate_labels[query_wheres])
-
-    # Limit query filenames/labels to query_size
-    rand_indices = np.random.permutation(len(query_labels))[:query_size]
-    query_filenames = np.asarray(query_filenames)[rand_indices]
-    query_labels = np.asarray(query_labels)[rand_indices]
-
-    # Make sure that the query classes are in the support classes
-    for q in query_labels:
-      assert q in support_labels
-
-
-    # Replace the query labels to match the support classes
-    the_wheres = []
-    for idx, val in enumerate(query_labels):
-      the_where = np.where(support_labels == val)[0]
-      if the_where.size > 1:
-        the_where = the_where[0]
-      the_wheres.append(the_where)
-
-    # Convert support labels from whatever their true value is to range [0, len(indices))
-    # (same as was done already for the query labels)
-    _, support_labels = np.unique(support_labels, return_inverse=True)
-
-    for idx, the_where in enumerate(the_wheres):
-      query_labels[idx] = support_labels[the_where]
-    def load_img(filename):
-      img = cv2.imread(os.path.join(self._img_directory, filename))
-      img = cv2.resize(img, (256, 256))
-      return img
-
-    support_images = [load_img(f_name) for f_name in support_filenames]
-    support_images = np.reshape(support_images,(-1, 256, 256, 3))[:, :, :, ::-1]
-    query_images = [load_img(f_name) for f_name in query_filenames]
-    query_images = np.reshape(query_images,(-1, 256, 256, 3))[:, :, :, ::-1]
-
-    support_set = {
-        'images': support_images,
-        'labels': support_labels
-    }
-    query_set = {
-        'images': query_images,
-        'labels': query_labels
-    }
-
-    return support_set, query_set
-
+    the_dict = self._datasets[dataset]
+    batch_files, batch_labels = [], []
+    for class_index in class_indices:
+      current_labels = [class_index] * num_shot
+      curr_files = the_dict[class_index]
+      np.random.shuffle(curr_files)
+      curr_files = curr_files[:num_shot]
+      batch_files.extend(curr_files)
+      batch_labels.extend(current_labels)
+    shuffle_indices = np.random.permutation(len(batch_labels))
+    batch_images = np.asarray([self._load_img(b) for b in np.array(batch_files)[shuffle_indices]])
+    batch_labels = np.asarray(batch_labels)[shuffle_indices]
+    # Make the labels zero-based
+    _, batch_labels = np.unique(batch_labels, return_inverse=True)
+    return batch_images, batch_labels
 
   def _load_csv_list(self, csv_filename):
     filepath = os.path.join(self._csv_directory, '{}.csv'.format(csv_filename))
@@ -117,18 +57,61 @@ class Loader:
           class_names.append(classname)
         filename_list.append(filename)
         class_list.append(class_names.index(classname))
-      return np.array(filename_list), np.array(class_list)
+      return filename_list, class_list
 
   def _load_csv_lists(self):
-    filename_class = {}
+    def train_test_split(imgs, train_pcnt):
+      '''
+      Splits and returns the given `imgs`. Assumes the same class for all
+      '''
+      img_count = len(imgs)
+      split_index = int(train_pcnt * img_count)
+      train_imgs = imgs[:split_index]
+      test_imgs = imgs[split_index:]
+      return train_imgs, test_imgs
+
+    all_files = []
+    all_labels = []
+    # Gather all filenames and labels together
     for set_name in ['train', 'test', 'val']:
       print("Loading {}".format(set_name))
-      filename_class[set_name] = self._load_csv_list(set_name)
-    return filename_class
+      curr_files, curr_labels = self._load_csv_list(set_name)
+      if all_labels:
+        curr_labels += np.max(all_labels)+1
+      all_files.extend(curr_files)
+      all_labels.extend(curr_labels)
+
+      # filename_class[set_name] = all_files, all_labels
+    all_files = np.array(all_files)
+    all_labels = np.array(all_labels)
+
+    the_dict = {
+        'train': {},
+        'test': {}
+    }
+    train_percent = 0.9
+    for label_val in np.arange(np.max(all_labels) + 1):
+      label_val_indices = np.where(all_labels == label_val)
+      train_imgs, test_imgs = train_test_split(all_files[label_val_indices], train_percent)
+      the_dict['train'][label_val] = train_imgs
+      the_dict['test'][label_val] = test_imgs
+    return the_dict
+
 
   def print_dataset_info(self):
+    '''
+    Inspect the dataset
+    '''
     print("Data shape:                          ")
-    for set_name in self._filename_class.keys():
-      print(set_name)
-      print("\tImages: {}".format(len(self._filename_class[set_name][0])))
-      print("\tClasses: {}".format(np.max(self._filename_class[set_name][1]) + 1))
+    for set_name, class_indices in self._datasets.items():
+      print("{}".format(set_name))
+      for class_index, examples in class_indices.items():
+        print("  Class {} -> {} examples".format(class_index, len(examples)))
+
+
+def main():
+  loader = Loader('/backup/miniimagenet')
+  loader.print_dataset_info()
+
+if __name__ == "__main__":
+  main()

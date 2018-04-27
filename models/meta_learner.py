@@ -2,137 +2,151 @@ import sonnet as snt
 import tensorflow as tf
 import numpy as np
 
-from models.standard_model import StandardModel
+from models.base_model import BaseModel
 import models.layers as Layers
 from constants import Constants
+from models.embedder import Embedder
+from models.encoder import Encoder
 
-class MetaLearner(StandardModel):
-  '''
-  The model name and the build function must be the same (in terms of what tensorflow sees and name scopes)
-  '''
-  def __init__(self, name='StandardModel'):
+class MetaLearner(BaseModel):
+  def __init__(self, name='MetaLearner'):
     super().__init__(name=name)
+    self._placeholders = []
 
-  def _build(self, support_images, graph_nodes): # pylint: disable=W0221
-    is_training = graph_nodes['is_training']
+  def _strip_name(self, name):
+    name_list = name.replace(':', ' ').replace('/', ' ').split()
+    if len(name_list) > 2:
+      return name_list[1]
+    return name_list[0]
 
-    inputs = Layers.conv2d(output_channels=16)(support_images)
-    inputs = Layers.max_pool(inputs)
-    inputs = snt.BatchNorm()(inputs, is_training=is_training)
-    inputs = tf.nn.relu(inputs)
 
-    inputs = Layers.conv2d(output_channels=32)(inputs)
-    inputs = Layers.max_pool(inputs)
-    inputs = snt.BatchNorm()(inputs, is_training=is_training)
-    inputs = tf.nn.relu(inputs)
-
-    inputs = Layers.conv2d(output_channels=64)(inputs)
-    inputs = Layers.max_pool(inputs)
-    inputs = snt.BatchNorm()(inputs, is_training=is_training)
-    inputs = tf.nn.relu(inputs)
-
-    inputs = Layers.conv2d(output_channels=64)(inputs)
-    inputs = Layers.max_pool(inputs)
-    inputs = snt.BatchNorm()(inputs, is_training=is_training)
-    inputs = tf.nn.relu(inputs)
-
-    inputs = snt.BatchFlatten()(inputs)
-    inputs = snt.Linear(50)(inputs)
-    self._output_layer_inputs = tf.nn.relu(inputs)
-
-    self._output_layer = snt.Linear(Constants.config['num_way'], name='class_linear')
-    self._output_layer_outputs = self._output_layer(inputs)
-    return self._output_layer_outputs
-
-  def prepare_for_training(self, sess, graph_nodes):
+  def build_placeholders(self, source_num_way, target_num_way,  grads_weights):
     '''
-    Adds weights/biases to the output layer so its number of outputs matches source num_way + target num_way
-    and replaces 'outputs' in `graph_nodes`
-    Also replaces graph_nodes['train_op'] with some frozen weights
-    '''
-    ##### EXTEND LAYER #####
-    # Get the current weight values
-    weights_tf, biases_tf = self._output_layer.get_variables()
-    weights, biases = sess.run([weights_tf, biases_tf])
-    # Compute number of new weights to be added
-    num_new_outputs = Constants.config['target_num_way'] - biases.shape[0]
+      Given a list of pairs of (gradient, weight) tensors, builds and returns a list placeholders of the same shape
+      '''
+    self._source_num_way = source_num_way
+    self._target_num_way = target_num_way
+    for g, w in grads_weights:
+      name = self._strip_name(w.name)
+      gradient_ph = tf.placeholder(tf.float32, g.shape,   name=name + '_grad_placeholder')
+      weight_ph = tf.placeholder(tf.float32, w.shape, name=name + '_placeholder')
+      self._placeholders.append((gradient_ph, weight_ph))
+    total = 0
+    for grad, weight in self._placeholders:
+      total += np.prod(grad.shape.as_list())
+      total += np.prod(weight.shape.as_list())
+    print("Number of parameters:", total)
+    return self._placeholders
 
-    # Create, connect and initialise the new layer
-    new_layer = snt.Linear(num_new_outputs, name='class_linear2')
-    new_layer_outputs = new_layer(self._output_layer_inputs)
-    sess.run(tf.variables_initializer(new_layer.get_variables()))
-    self._output_layer_outputs = tf.concat([self._output_layer_outputs, new_layer_outputs], -1)
+  def _build(self, images, graph_nodes): # pylint: disable=W0221
+    embedder = Embedder()
+    embedded_grads_weights = embedder.embed_all_grads_weights(self._placeholders)
+    # Fake batching
+    embedded_grads_weights = tf.expand_dims(embedded_grads_weights, 0)
+    encoder = Encoder(self._source_num_way, self._target_num_way)
+    encoded = encoder.encode(embedded_grads_weights)
+    decoded = encoder.decode(encoded)
+    # Fake batching
+    decoded = tf.squeeze(decoded, [0])
+    weight_updates = embedder.unembed_all_weights(decoded)
 
-    # Initialise with the new values
-    # Replace the model class layer outputs
-    graph_nodes['outputs'] = self._output_layer_outputs
-    graph_nodes['loss'] = self.get_loss(graph_nodes, num_way=Constants.config['target_num_way'])
-    ##### FREEZE WEIGHTS #####
-    # Get all (gradient, weight) pairs
-    grads = graph_nodes['optimizer'].compute_gradients(graph_nodes['loss'])
-    # Only keep the gradients for the added FC layer
-    allowed_gradients = [(grad, weight) for (grad, weight) in grads if weight in new_layer.get_variables()]
-    # Replace the train op with our limited update
-    graph_nodes['train_op'] = graph_nodes['optimizer'].apply_gradients(allowed_gradients, global_step=graph_nodes['global_step'])
-
-    # Initialise the variables created by the optimizer
-    leftover_strings = set([v.decode('UTF-8') for v in sess.run(tf.report_uninitialized_variables())])
-    leftover_vars = [v for v in tf.global_variables() if v.name.split(':')[0] in leftover_strings]
-    sess.run(tf.variables_initializer(leftover_vars))
+    # Get the updated model
+    model_forward = self._build_model_from_placeholders_updates(weight_updates)
+    self.outputs = model_forward(images)
+    return self.outputs
 
 
-  def get_loss(self, graph_nodes, num_way=None):
+  def _build_model_from_placeholders_updates(self, weight_updates):
+    return MetaLearner.build_new_model([self._placeholders[0][1] + weight_updates[0],
+                                        self._placeholders[1][1] + weight_updates[1],
+                                        self._placeholders[2][1] + weight_updates[2],
+                                        self._placeholders[3][1] + weight_updates[3],
+                                        self._placeholders[4][1] + weight_updates[4]])
+
+  @staticmethod
+  def build_new_model(weights):
+    def model_forward(inputs):
+      nonlocal weights
+      # Create tf.Variables if required
+      weights = [tf.Variable(w) if isinstance(w, np.ndarray) else w for w in weights]
+
+      outputs = tf.nn.conv2d(inputs, weights[0], [1, 1, 1, 1], padding='SAME', name='new_conv1')
+      outputs = Layers.max_pool(outputs)
+      outputs = tf.nn.relu(outputs)
+
+      outputs = tf.nn.conv2d(outputs, weights[1], [1, 1, 1, 1], padding='SAME', name='new_conv2')
+      outputs = Layers.max_pool(outputs)
+      outputs = tf.nn.relu(outputs)
+
+      outputs = tf.nn.conv2d(outputs, weights[2], [1, 1, 1, 1], padding='SAME', name='new_conv3')
+      outputs = Layers.max_pool(outputs)
+      outputs = tf.nn.relu(outputs)
+
+      outputs = tf.nn.conv2d(outputs, weights[3], [1, 1, 1, 1], padding='SAME', name='new_conv4')
+      outputs = Layers.max_pool(outputs)
+      outputs = tf.nn.relu(outputs)
+
+      outputs = tf.nn.conv2d(outputs, weights[4], [1, 1, 1, 1], padding='SAME', name='new_conv5')
+      outputs = Layers.global_pool(outputs)
+      # Reshape to one-hot predictions
+      outputs = tf.reshape(outputs, [-1, weights[-1].shape.as_list()[-1]])
+      return outputs
+
+    return model_forward
+
+  def get_loss(self, graph_nodes):
     '''
     Build and return the loss calculation ops. Assume that graph_nodes contains the nodes you need,
     as a KeyError will be raised if a key is missing.
     '''
-    num_way = Constants.config['num_way'] if num_way is None else num_way
     targets = graph_nodes['labels']
-    targets = tf.one_hot(tf.to_int32(targets), num_way)
-    return tf.losses.softmax_cross_entropy(targets, self._output_layer_outputs)
+    targets = tf.one_hot(tf.to_int32(targets), self._target_num_way)
+    return tf.losses.softmax_cross_entropy(targets, self.outputs)
 
   def get_target_tensors(self):
     '''
     Returns an arbitrarily nested structure of tensors that are the required input for
     calculating the loss.
     '''
-    return tf.placeholder(tf.float32, shape=self.TARGET_SHAPE, name="labels")
+    return tf.placeholder(tf.float32, shape=self.TARGET_SHAPE, name="input_y")
 
-  def _get_class_indices(self, dataset, num_way):
-    '''
-    Builds and returns a list of indices for the classes we wish to sample (always the same classes)
-    '''
-    chosen_class_labels = np.arange(num_way)
-    return chosen_class_labels
-
-
-  def training_pass(self, sess, graph_nodes, summary_op, images, labels):
+  def training_pass(self, sess, graph_nodes, summary_op, images, labels, grads_weights):
     '''
     A single pass through the given batch from the training set
     '''
+    feed_dict = {
+      graph_nodes['images']: images,
+      graph_nodes['labels']: labels,
+      graph_nodes['is_training']: True
+    }
+    for (grad, weight), (grad_ph, weight_ph) in zip(grads_weights, self._placeholders):
+      feed_dict[grad_ph] = grad
+      feed_dict[weight_ph] = weight
+
     _, loss, outputs, summary = sess.run([
-        graph_nodes['train_op'],
-        graph_nodes['loss'],
-        graph_nodes['outputs'],
-        summary_op
-    ], {
-        graph_nodes['images']: images,
-        graph_nodes['labels']: labels,
-        graph_nodes['is_training']: True
-    })
+      graph_nodes['train_op'],
+      graph_nodes['loss'],
+      graph_nodes['outputs'],
+      summary_op
+    ], feed_dict)
     return loss, outputs, summary
 
-  def test_pass(self, sess, graph_nodes, summary_op, images, labels):
+  def test_pass(self, sess, graph_nodes, summary_op, images, labels, grads_weights):
     '''
     A single pass through the given batch from the training set
     '''
+    feed_dict = {
+      graph_nodes['images']: images,
+      graph_nodes['labels']: labels,
+      graph_nodes['is_training']: False
+    }
+    for (grad, weight), (grad_ph, weight_ph) in zip(grads_weights, self._placeholders):
+      feed_dict[grad_ph] = grad
+      feed_dict[weight_ph] = weight
+
     loss, outputs, summary = sess.run([
-        graph_nodes['loss'],
-        graph_nodes['outputs'],
-        summary_op
-    ], {
-        graph_nodes['images']: images,
-        graph_nodes['labels']: labels,
-        graph_nodes['is_training']: False
-    })
+      graph_nodes['loss'],
+      graph_nodes['outputs'],
+      summary_op
+    ], feed_dict)
     return loss, outputs, summary

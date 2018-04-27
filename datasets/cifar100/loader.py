@@ -61,7 +61,7 @@ class Loader:
         'train': {},
         'test': {}
     }
-    train_percent = 0.8
+    train_percent = 0.9
     for label_val in np.arange(np.max(all_labels) + 1):
       label_val_indices = np.where(all_labels == label_val)
       train_imgs, test_imgs = train_test_split(all_images[label_val_indices], train_percent)
@@ -95,10 +95,15 @@ class Loader:
     '''
     Inspect the dataset
     '''
-    return
     print("Data shape:                          ")
     for set_name, class_indices in self._datasets.items():
       print("{}".format(set_name))
-      print(class_indices.keys())
       for class_index, examples in class_indices.items():
         print("  Class {} -> {} examples".format(class_index, len(examples)))
+
+def main():
+  loader = Loader('datasets')
+  loader.print_dataset_info()
+
+if __name__ == "__main__":
+  main()
